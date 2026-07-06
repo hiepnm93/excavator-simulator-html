@@ -4,7 +4,7 @@ Interactive hydraulic excavator simulator in a single HTML file — a browser ta
 [Excavator-Simscape](https://github.com/simscape/Excavator-Simscape) and
 [excavator_simulator_mujoco](https://github.com/KennyVilella/excavator_simulator_mujoco).
 
-**[▶ Live demo](https://USER.github.io/excavator-simulator-html/)**
+**[▶ Live demo](https://hiepnm93.github.io/excavator-simulator-html/)**
 
 - Swing / boom / stick / bucket sliders (forward kinematics)
 - Diggable soil heightfield: dig below ground with the bucket curled to fill it, raise and open to dump
