@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Excavator Simulator</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; }
+  #panel {
+    position: absolute; top: 12px; left: 12px; width: 240px;
+    background: rgba(20, 24, 30, 0.85); color: #e8eaed; border-radius: 10px;
+    padding: 14px 16px; font-size: 13px; backdrop-filter: blur(4px);
+  }
+  #panel h1 { font-size: 15px; margin: 0 0 10px; }
+  label { display: block; margin-top: 8px; color: #9aa0a6; }
+  input[type=range] { width: 100%; }
+  button {
+    margin-top: 12px; width: 100%; padding: 7px; border: 0; border-radius: 6px;
+    background: #f6b100; color: #1a1a1a; font-weight: 600; cursor: pointer; font-size: 13px;
+  }
+  button:hover { filter: brightness(1.1); }
+  #stats { margin-top: 10px; border-top: 1px solid #444; padding-top: 8px; line-height: 1.6; }
+  #stats b { color: #f6b100; }
+  #hint { position: absolute; bottom: 10px; left: 12px; color: #9aa0a6; font-size: 12px;
+          background: rgba(20,24,30,.6); padding: 4px 8px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>🚜 Hydraulic Excavator</h1>
+  <label>Swing <span id="v-swing">0°</span></label>
+  <input type="range" id="swing" min="-180" max="180" value="0" step="1">
+  <label>Boom <span id="v-boom">30°</span></label>
+  <input type="range" id="boom" min="-10" max="65" value="30" step="1">
+  <label>Stick <span id="v-stick">-60°</span></label>
+  <input type="range" id="stick" min="-140" max="-20" value="-60" step="1">
+  <label>Bucket <span id="v-bucket">-30°</span></label>
+  <input type="range" id="bucket" min="-140" max="30" value="-30" step="1">
+  <button id="digcycle">▶ Auto Dig Cycle</button>
+  <button id="reset">Reset Terrain</button>
+  <div id="stats">
+    Bucket fill: <b id="fill">0%</b><br>
+    Moved: <b id="moved">0.0 m³</b><br>
+    Tip height: <b id="tip">0.0 m</b>
+  </div>
+</div>
+<div id="hint">Drag to orbit · scroll to zoom · dig below ground to fill the bucket, raise + curl open to dump</div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ---------- scene ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87b5d9);
+scene.fog = new THREE.Fog(0x87b5d9, 40, 90);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(12, 8, 12);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 2, 0);
+
+const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+sun.position.set(15, 25, 10);
+sun.castShadow = true;
+sun.shadow.camera.left = sun.shadow.camera.bottom = -25;
+sun.shadow.camera.right = sun.shadow.camera.top = 25;
+sun.shadow.mapSize.set(2048, 2048);
+scene.add(sun, new THREE.AmbientLight(0xbfd4e5, 0.9));
+
+// ---------- terrain (diggable heightfield) ----------
+const GRID = 96, SIZE = 60, CELL = SIZE / GRID;
+const terrainGeo = new THREE.PlaneGeometry(SIZE, SIZE, GRID - 1, GRID - 1);
+terrainGeo.rotateX(-Math.PI / 2);
+const heights = new Float32Array(GRID * GRID); // y offsets
+const terrain = new THREE.Mesh(
+  terrainGeo,
+  new THREE.MeshLambertMaterial({ color: 0x8a6f47 })
+);
+terrain.receiveShadow = true;
+scene.add(terrain);
+
+function terrainIndex(x, z) {
+  const i = Math.round((x + SIZE / 2) / CELL), j = Math.round((z + SIZE / 2) / CELL);
+  if (i < 0 || i >= GRID || j < 0 || j >= GRID) return -1;
+  return j * GRID + i;
+}
+function updateTerrain() {
+  const pos = terrainGeo.attributes.position;
+  for (let k = 0; k < heights.length; k++) pos.setY(k, heights[k]);
+  pos.needsUpdate = true;
+  terrainGeo.computeVertexNormals();
+}
+function terrainHeightAt(x, z) {
+  const k = terrainIndex(x, z);
+  return k < 0 ? 0 : heights[k];
+}
+
+// ---------- excavator ----------
+const yellow = new THREE.MeshStandardMaterial({ color: 0xf6b100, roughness: 0.5 });
+const dark = new THREE.MeshStandardMaterial({ color: 0x33373d, roughness: 0.7 });
+const steel = new THREE.MeshStandardMaterial({ color: 0x8a9099, roughness: 0.35, metalness: 0.6 });
+
+function box(w, h, d, mat, x = 0, y = 0, z = 0) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  return m;
+}
+
+// tracks + swing platform
+const root = new THREE.Group(); scene.add(root);
+root.add(box(4.2, 1.0, 1.1, dark, 0, 0.5, 1.35));
+root.add(box(4.2, 1.0, 1.1, dark, 0, 0.5, -1.35));
+const swing = new THREE.Group(); swing.position.y = 1.2; root.add(swing);
+swing.add(box(3.4, 1.0, 2.6, yellow, -0.3, 0.5, 0));
+swing.add(box(1.4, 1.1, 1.2, yellow, -1.0, 1.55, 0.6)); // cab
+const counterweight = box(1.0, 1.0, 2.4, dark, -1.9, 0.6, 0);
+swing.add(counterweight);
+
+// boom: pivot at front of platform
+const boomLen = 4.6, stickLen = 3.0, bucketLen = 1.3;
+const boomPivot = new THREE.Group(); boomPivot.position.set(1.0, 0.9, 0); swing.add(boomPivot);
+boomPivot.add(box(boomLen, 0.55, 0.4, yellow, boomLen / 2, 0, 0));
+const stickPivot = new THREE.Group(); stickPivot.position.set(boomLen, 0, 0); boomPivot.add(stickPivot);
+stickPivot.add(box(stickLen, 0.4, 0.3, yellow, stickLen / 2, 0, 0));
+const bucketPivot = new THREE.Group(); bucketPivot.position.set(stickLen, 0, 0); stickPivot.add(bucketPivot);
+// bucket: open box shape
+const bucket = new THREE.Group(); bucketPivot.add(bucket);
+bucket.add(box(bucketLen, 0.12, 1.1, steel, bucketLen / 2, -0.35, 0));       // floor
+bucket.add(box(0.12, 0.8, 1.1, steel, 0.06, 0, 0));                          // back
+bucket.add(box(bucketLen, 0.7, 0.1, steel, bucketLen / 2, -0.05, 0.55));     // side
+bucket.add(box(bucketLen, 0.7, 0.1, steel, bucketLen / 2, -0.05, -0.55));    // side
+// soil load shown in bucket
+const soilLoad = box(bucketLen * 0.8, 0.4, 0.9, new THREE.MeshLambertMaterial({ color: 0x6b5637 }), bucketLen / 2, -0.1, 0);
+soilLoad.visible = false; bucket.add(soilLoad);
+
+// hydraulic cylinders (visual only)
+function cylinder(parent, a, b) {
+  const g = new THREE.Group(); parent.add(g);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 8), steel);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 1, 8), dark);
+  rod.castShadow = body.castShadow = true;
+  g.add(body, rod);
+  g.userData = { a, b, body, rod };
+  return g;
+}
+const cylBoom = cylinder(swing, new THREE.Vector3(0.6, 0.4, 0), null);
+const cylStick = cylinder(boomPivot, new THREE.Vector3(boomLen * 0.45, 0.3, 0), null);
+function updateCylinder(cyl, worldA, worldB, parent) {
+  const a = parent.worldToLocal(worldA.clone()), b = parent.worldToLocal(worldB.clone());
+  const mid = a.clone().lerp(b, 0.5), dir = b.clone().sub(a), len = dir.length();
+  const { body, rod } = cyl.userData;
+  body.position.copy(a.clone().lerp(b, 0.3)); body.scale.y = len * 0.55;
+  rod.position.copy(mid.clone().lerp(b, 0.45)); rod.scale.y = len * 0.5;
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  body.quaternion.copy(q); rod.quaternion.copy(q);
+}
+
+// ---------- controls / state ----------
+const state = { swing: 0, boom: 30, stick: -60, bucket: -30 };
+const sliders = {};
+for (const k of Object.keys(state)) {
+  sliders[k] = document.getElementById(k);
+  sliders[k].addEventListener('input', () => {
+    state[k] = +sliders[k].value;
+    autoCycle = false; digBtn.textContent = '▶ Auto Dig Cycle';
+  });
+}
+const rad = d => d * Math.PI / 180;
+
+let bucketFill = 0;       // 0..1
+let movedTotal = 0;       // m³
+const BUCKET_CAP = 0.4;   // m³
+const tipWorld = new THREE.Vector3();
+
+function applyPose() {
+  swing.rotation.y = rad(state.swing);
+  boomPivot.rotation.z = rad(state.boom);
+  stickPivot.rotation.z = rad(state.stick);
+  bucketPivot.rotation.z = rad(state.bucket);
+  for (const k in state) document.getElementById('v-' + k).textContent = Math.round(state[k]) + '°';
+  // cylinders
+  scene.updateMatrixWorld();
+  const boomMid = new THREE.Vector3(boomLen * 0.5, 0.25, 0); boomPivot.localToWorld(boomMid);
+  updateCylinder(cylBoom, swing.localToWorld(new THREE.Vector3(0.6, 0.4, 0)), boomMid, swing);
+  const stickTop = new THREE.Vector3(0.4, 0.25, 0); stickPivot.localToWorld(stickTop);
+  updateCylinder(cylStick, boomPivot.localToWorld(new THREE.Vector3(boomLen * 0.45, 0.35, 0)), stickTop, boomPivot);
+}
+
+// ---------- digging ----------
+function digStep() {
+  bucket.localToWorld(tipWorld.set(bucketLen, -0.35, 0));
+  const ground = terrainHeightAt(tipWorld.x, tipWorld.z);
+  document.getElementById('tip').textContent = tipWorld.y.toFixed(1) + ' m';
+
+  // bucket curled enough to hold soil?
+  const holding = state.bucket < -50;
+
+  if (tipWorld.y < ground && holding && bucketFill < 1) {
+    // dig: lower terrain in a small radius around the tip
+    const R = 1.2; let removed = 0;
+    for (let dx = -R; dx <= R; dx += CELL) for (let dz = -R; dz <= R; dz += CELL) {
+      const k = terrainIndex(tipWorld.x + dx, tipWorld.z + dz);
+      if (k < 0) continue;
+      const fall = 0.02 * (1 - Math.hypot(dx, dz) / (R * 1.5));
+      if (fall > 0 && heights[k] > tipWorld.y) { heights[k] -= fall; removed += fall * CELL * CELL; }
+    }
+    if (removed > 0) { bucketFill = Math.min(1, bucketFill + removed / BUCKET_CAP); updateTerrain(); }
+  } else if (!holding && bucketFill > 0 && tipWorld.y > ground + 0.3) {
+    // dump: raise terrain under the bucket
+    const R = 1.0; let dumped = 0;
+    const amount = Math.min(bucketFill, 0.06);
+    for (let dx = -R; dx <= R; dx += CELL) for (let dz = -R; dz <= R; dz += CELL) {
+      const k = terrainIndex(tipWorld.x + dx, tipWorld.z + dz);
+      if (k < 0) continue;
+      const rise = amount * 0.03 * (1 - Math.hypot(dx, dz) / (R * 1.4));
+      if (rise > 0) { heights[k] += rise; dumped += rise * CELL * CELL; }
+    }
+    bucketFill = Math.max(0, bucketFill - amount);
+    movedTotal += dumped;
+    updateTerrain();
+  }
+  soilLoad.visible = bucketFill > 0.05;
+  soilLoad.scale.y = Math.max(0.15, bucketFill);
+  document.getElementById('fill').textContent = Math.round(bucketFill * 100) + '%';
+  document.getElementById('moved').textContent = movedTotal.toFixed(1) + ' m³';
+}
+
+// ---------- auto dig cycle (keyframed, like the Simscape dig-cycle demo) ----------
+// ponytail: keyframe interpolation, not inverse kinematics — good enough for a demo cycle
+const CYCLE = [ // [t, swing, boom, stick, bucket]
+  [0.0,   0,  45,  -40,  10],
+  [0.15,  0,   5,  -95, -20],
+  [0.30,  0,  10, -120, -95],   // curl through soil
+  [0.45,  0,  50,  -80, -110],  // lift
+  [0.65, 80,  50,  -80, -110],  // swing to dump spot
+  [0.78, 80,  45,  -60,  20],   // open bucket = dump
+  [1.0,   0,  45,  -40,  10],   // return
+];
+let autoCycle = false, cycleT = 0;
+const digBtn = document.getElementById('digcycle');
+digBtn.onclick = () => { autoCycle = !autoCycle; cycleT = 0; digBtn.textContent = autoCycle ? '⏸ Stop Cycle' : '▶ Auto Dig Cycle'; };
+document.getElementById('reset').onclick = () => { heights.fill(0); movedTotal = 0; bucketFill = 0; updateTerrain(); };
+
+function runCycle(dt) {
+  cycleT = (cycleT + dt / 14) % 1; // 14 s per cycle
+  let i = 0;
+  while (i < CYCLE.length - 2 && CYCLE[i + 1][0] <= cycleT) i++;
+  const [t0, ...a] = CYCLE[i], [t1, ...b] = CYCLE[i + 1];
+  const f = (cycleT - t0) / (t1 - t0);
+  ['swing', 'boom', 'stick', 'bucket'].forEach((k, j) => {
+    state[k] = a[j] + (b[j] - a[j]) * f;
+    sliders[k].value = state[k];
+  });
+}
+
+// ---------- loop ----------
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (autoCycle) runCycle(dt);
+  applyPose();
+  digStep();
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
