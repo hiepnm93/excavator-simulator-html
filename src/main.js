@@ -210,6 +210,7 @@ function animate() {
   renderer.render(scene, camera);
 }
 animate();
+window.__sim = { state, camera, controls };   // diagnostics hook for tests
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;

@@ -7,8 +7,10 @@ import { MAT, box, lateralCyl, shadowed } from './parts.js';
 // loop bottom (wheel y − loop r − shoe) sits on grade: H0 above model origin
 const WHEEL_X = 1.8, WHEEL_Y = -0.35, LOOP_R = 0.5, SHOE_W = 0.8;
 
-/* place shoes along the track loop: two straights + two half-circle arcs */
-function buildTrackBand(track) {
+/* place shoes along the track loop: two straights + two half-circle arcs;
+   returns the shoe meshes so they register with the component (and can be
+   hidden when the body skin replaces the undercarriage) */
+function buildTrackBand(track, meshes) {
   const straight = 2 * WHEEL_X, arc = Math.PI * LOOP_R;
   const total = 2 * straight + 2 * arc;
   const n = 42, step = total / n;
@@ -37,6 +39,7 @@ function buildTrackBand(track) {
     grouser.position.y = -0.05;               // outward side of the loop
     g.add(plate, grouser);
     track.add(g);
+    meshes.push(plate, grouser);
   }
 }
 
@@ -62,7 +65,7 @@ export function buildLowerStructure() {
       add(t, lateralCyl(0.15, 0.5, MAT.pin, x, WHEEL_Y - 0.32, 0, 12));
     for (const x of [-0.7, 0.7])
       add(t, lateralCyl(0.1, 0.4, MAT.pin, x, WHEEL_Y + 0.36, 0, 12));
-    buildTrackBand(t);
+    buildTrackBand(t, meshes);
   }
 
   // carbody + X-frame legs to the track frames
