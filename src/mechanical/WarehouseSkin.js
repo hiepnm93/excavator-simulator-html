@@ -147,14 +147,38 @@ export async function loadWarehouseSkin(url) {
   // white Color_001 + black Color_009 — low vertex count but spanning the
   // whole counterweight width). The "316" decals stay inside the hidden arm.
   house.updateMatrixWorld(true);
+  let letterBox = null;
   house.traverse(o => {
     if (!o.isMesh) return;
     const name = o.material?.name;
     if (name !== 'Color_001' && name !== 'Color_009') return;
     if (o.geometry.attributes.position.count > 500) return;
-    const sz = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3());
-    if (Math.max(sz.x, sz.y, sz.z) > 2.5) o.visible = false;
+    const bb3 = new THREE.Box3().setFromObject(o);
+    const sz = bb3.getSize(new THREE.Vector3());
+    if (Math.max(sz.x, sz.y, sz.z) > 2.5) {
+      o.visible = false;
+      letterBox = letterBox ? letterBox.union(bb3) : bb3;
+    }
   });
+  // the model carries several stacked banner layers (side banners caught
+  // above, plus a separate rear-face banner: letters, backing strips, end
+  // blocks). Hide small meshes that read as rear-face banner layers: wide
+  // laterally, short, thin fore-aft, mounted on the rear half.
+  {
+    const hb = new THREE.Box3().setFromObject(house);
+    const rearX = (hb.min.x + hb.max.x) / 2 - 1.0;
+    house.traverse(o => {
+      if (!o.isMesh || o.visible === false) return;
+      if (o.geometry.attributes.position.count > 1300) return;
+      const bb3 = new THREE.Box3().setFromObject(o);
+      const sz = bb3.getSize(new THREE.Vector3());
+      const c = bb3.getCenter(new THREE.Vector3());
+      if (sz.z >= 1.0 && sz.y <= 1.0 && sz.x <= 0.6 && c.x < rearX) {
+        o.visible = false;
+        letterBox = letterBox ? letterBox.union(bb3) : bb3;
+      }
+    });
+  }
 
   const meshes = { base: [], house: [] };
   base.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; meshes.base.push(o); } });
@@ -164,6 +188,32 @@ export async function loadWarehouseSkin(url) {
   const baseWrap = new THREE.Group(), houseWrap = new THREE.Group();
   baseWrap.add(base);
   houseWrap.add(house);
+
+  // neutral replacement decal on the counterweight where the lettering was
+  if (letterBox) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 128;
+    const ctx2 = canvas.getContext('2d');
+    ctx2.fillStyle = '#b3221f';                             // banner bar
+    ctx2.fillRect(0, 18, 512, 92);
+    ctx2.fillStyle = '#f4f4f4';
+    ctx2.font = 'bold 72px system-ui, Arial, sans-serif';
+    ctx2.textAlign = 'center';
+    ctx2.textBaseline = 'middle';
+    ctx2.fillText('EXCAVATOR', 256, 66);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const ctr = letterBox.getCenter(new THREE.Vector3());
+    const decal = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.1, 0.52),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+    decal.position.set(letterBox.min.x - 0.05, ctr.y, 0);   // rear face, machine centerline
+    decal.rotation.y = -Math.PI / 2;                        // face rearwards (−x)
+    decal.renderOrder = 2;
+    houseWrap.add(decal);
+    meshes.house.push(decal);
+  }
+
   return { base: baseWrap, house: houseWrap, houseInner: house, meshes, armSrc, armRaw };
 }
 
