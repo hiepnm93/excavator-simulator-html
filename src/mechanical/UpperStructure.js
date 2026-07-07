@@ -50,8 +50,8 @@ export function buildUpperStructure(swing) {
   addC(box(0.6, 0.05, 0.95, MAT.dark, 0.45, 1.52, 0));                      // roof hatch
 
   // handrails along the deck and hood
-  rail(g, [[-3.3, 1.75, -1.15], [-1.4, 1.75, -1.15], [-0.9, 0.6, -1.2]], 0.5);
-  rail(g, [[-3.3, 1.75, 1.15], [-2.75, 1.75, 1.15]], 0.5);
+  meshes.push(...rail(g, [[-3.3, 1.75, -1.15], [-1.4, 1.75, -1.15], [-0.9, 0.6, -1.2]], 0.5));
+  meshes.push(...rail(g, [[-3.3, 1.75, 1.15], [-2.75, 1.75, 1.15]], 0.5));
 
   // boom foot bracket: twin plates + cross bosses at A1 and A2
   for (const z of [0.36, -0.36])
