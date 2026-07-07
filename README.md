@@ -93,6 +93,43 @@ Built procedurally from published engineering *data* only — no assets copied f
   [excavator_simulator_mujoco](https://github.com/KennyVilella/excavator_simulator_mujoco)
   / [soil_dynamics_cpp](https://github.com/KennyVilella/soil_dynamics_cpp).
 
+## Skin rigging rules (checklist for swapping in a new model)
+
+Any replacement skin must satisfy these invariants — they are what
+`src/mechanical/WarehouseSkin.js` enforces, and every one of them has been a real bug:
+
+1. **Pin coincidence** — after rigging, every link's pins must land exactly on the
+   simulator's kinematic pins: boom on A1 and B3, stick on B3 and C4, bucket on C4 and D2.
+   Verify numerically (not by eye) via the `window.__skinDebug` hook: sim pins from
+   `mech.swing.localToWorld(PIN − SWING_F)` must equal `holder.localToWorld(armFrame × pin)`
+   to ≤ 5 mm on all three axes.
+2. **Sagittal working plane** — all pins must have lateral coordinate z = 0 in the swing
+   frame (the plane of the Simscape BOF/TOF pin-skeleton figure). A skin arm parked yawed
+   out of plane needs the full 3D basis alignment (link axis → target axis AND arm lateral
+   axis → machine lateral axis); an in-plane-only rotation leaves the far pins metres off,
+   visible only in the TOP view.
+3. **House/boom heading** — the house's longitudinal axis must equal the boom plane
+   direction (+x at swing 0). Models are often parked with the house slewed relative to the
+   tracks; correct the house yaw about the swing axis from the static arm's plan direction
+   (boom foot → cutting edge), never assume house and undercarriage agree.
+4. **Base normalization** — undercarriage centered on the swing axis, track axis along +x
+   (minimal plan footprint), shoes on grade (bbox min y = −H0), one uniform scale shared by
+   base and house.
+5. **Actuators between real lugs** — cylinders/links must anchor at the skin's own mounting
+   lugs (body at base lug, rod at rod lug, re-aimed per frame; 4-bar links chase the live E1
+   node). Overlaying the procedural cylinders on a differently-shaped skin leaves them
+   floating mid-air.
+6. **Frame bookkeeping** — link holders carry scene-world-at-rig coordinates, the house
+   content holder carries raw glTF coordinates; lugs and mesh offsets must be expressed in
+   the right frame or parts teleport to the un-rigged pose.
+7. **Branding** — hide brand lettering meshes (identify by material + span, textures are not
+   always used).
+
+Test procedure after any skin change: check the numeric pin assertion above; screenshot the
+machine from the SIDE and from the TOP (plan view is where lateral misalignment hides) at
+design pose, arm raised, and digging below grade; run one full auto dig cycle plus a swing
+to ±60° and confirm no piece separates.
+
 ## Controls
 Swing / boom / stick / bucket sliders set operator targets (the hydraulics decide how fast the
 joints actually follow), auto dig cycle, diggable terrain: dig below grade with the bucket
