@@ -129,6 +129,20 @@ export async function loadWarehouseSkin(url) {
   const off = new THREE.Vector3(-c.x, -H0 - bb.min.y, -c.z);
   setBoth(h => h.position.copy(off));
 
+  // 6) the model is parked with the house slewed relative to the tracks —
+  //    rotate the house about the swing axis so the static arm's plan
+  //    direction (boom foot -> cutting edge) matches the machine's +x,
+  //    i.e. the house facing agrees with the simulator's boom plane
+  {
+    const a1 = new THREE.Vector3(...ARM_PINS.A1).applyMatrix4(armRaw);
+    const d2 = new THREE.Vector3(...ARM_PINS.D2).applyMatrix4(armRaw);
+    const d = d2.sub(a1).applyQuaternion(house.quaternion);
+    const yaw = Math.atan2(d.z, d.x);
+    const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    house.quaternion.premultiply(qy);
+    house.position.applyQuaternion(qy);
+  }
+
   // brand text: hide the counterweight lettering (two stacked letter meshes,
   // white Color_001 + black Color_009 — low vertex count but spanning the
   // whole counterweight width). The "316" decals stay inside the hidden arm.
