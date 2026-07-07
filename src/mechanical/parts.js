@@ -42,16 +42,20 @@ export function profile(pts, w, mat, z0 = 0, curved = false) {
   return shadowed(new THREE.Mesh(g, mat));
 }
 
-/* handrail: posts + top tube through [x,y,z] waypoints (r = tube radius) */
+/* handrail: posts + top tube through [x,y,z] waypoints (r = tube radius);
+   returns the created meshes */
 export function rail(group, pts, h, r = 0.022, mat = MAT.dark) {
+  const out = [];
   const seg = (a, b) => {
     const v = new THREE.Vector3().subVectors(b, a);
     const m = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(r, r, v.length(), 8), mat));
     m.position.copy(a).addScaledVector(v, 0.5);
     m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v.clone().normalize());
     group.add(m);
+    out.push(m);
   };
   const tops = pts.map(p => new THREE.Vector3(p[0], p[1] + h, p[2]));
   pts.forEach((p, i) => seg(new THREE.Vector3(...p), tops[i]));
   for (let i = 0; i + 1 < tops.length; i++) seg(tops[i], tops[i + 1]);
+  return out;
 }
