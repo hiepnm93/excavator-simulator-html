@@ -14,9 +14,28 @@
    can rotate with the simulator's swing joint. */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { H0 } from '../ExcavatorParams.js';
+import { H0, SWING_F, PIN } from '../ExcavatorParams.js';
 
 const TRACK_LEN = 5.1;   // m — target undercarriage length to fit the pin table
+
+/* The model's arm is a Liebherr-style two-piece boom in one fixed pose. Its
+   pivot pins, measured from the GLB's vertex data in the arm assembly's
+   local frame (model units): boom foot, boom→stick, stick→bucket, cutting
+   edge. The adjust cylinder is frozen, so lower+upper boom rig as one link. */
+const ARM_PINS = {
+  A1: new THREE.Vector3(254.2, 15.4, 23.7),
+  B3: new THREE.Vector3(75.5, 15.4, 121.0),
+  C4: new THREE.Vector3(15.7, 15.3, 36.0),
+  D2: new THREE.Vector3(41.6, 15.2, 1.7),
+};
+/* arm.children indices per link; the rest (boom/stick/bucket cylinders,
+   4-bar links, "316" decals) stay hidden — the simulator's aimed cylinders
+   and linkage take their place */
+const ARM_CLUSTERS = {
+  boom: { idx: [12, 6, 11], pins: ['A1', 'B3'] },   // lower boom, upper boom, adjust cyl
+  stick: { idx: [8, 13], pins: ['B3', 'C4'] },
+  bucket: { idx: [14], pins: ['C4', 'D2'] },
+};
 
 const meshCount = o => { let n = 0; o.traverse(k => { if (k.isMesh) n++; }); return n; };
 const span = o => {
@@ -91,6 +110,19 @@ export async function loadWarehouseSkin(url) {
   const off = new THREE.Vector3(-c.x, -H0 - bb.min.y, -c.z);
   setBoth(h => h.position.copy(off));
 
+  // brand text: hide the counterweight lettering (two stacked letter meshes,
+  // white Color_001 + black Color_009 — low vertex count but spanning the
+  // whole counterweight width). The "316" decals stay inside the hidden arm.
+  house.updateMatrixWorld(true);
+  house.traverse(o => {
+    if (!o.isMesh) return;
+    const name = o.material?.name;
+    if (name !== 'Color_001' && name !== 'Color_009') return;
+    if (o.geometry.attributes.position.count > 500) return;
+    const sz = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3());
+    if (Math.max(sz.x, sz.y, sz.z) > 2.5) o.visible = false;
+  });
+
   const meshes = { base: [], house: [] };
   base.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; meshes.base.push(o); } });
   house.traverse(o => { if (o.isMesh && o.visible !== false) { o.castShadow = o.receiveShadow = true; meshes.house.push(o); } });
@@ -99,5 +131,61 @@ export async function loadWarehouseSkin(url) {
   const baseWrap = new THREE.Group(), houseWrap = new THREE.Group();
   baseWrap.add(base);
   houseWrap.add(house);
-  return { base: baseWrap, house: houseWrap, meshes };
+  return { base: baseWrap, house: houseWrap, meshes, armSrc };
+}
+
+/* Re-parent the model's arm clusters onto the simulator's pivot groups so
+   the SketchUp boom/stick/bucket follow the simulated joints. Must be
+   called after skin.house has been added to mech.swing and rendered pose
+   matrices are current; q = solveKinematics pins for the CURRENT joint
+   state (swing-frame design coordinates). */
+export function rigArm(skin, mech, q) {
+  const arm = skin.armSrc;
+  arm.updateMatrixWorld(true);
+  mech.swing.updateMatrixWorld(true);
+  const swingInv = mech.swing.matrixWorld.clone().invert();
+
+  // model pins -> swing-local frame (through the hidden arm's world chain)
+  const pinSwing = name => ARM_PINS[name].clone()
+    .applyMatrix4(arm.matrixWorld).applyMatrix4(swingInv);
+  // target pins in swing-local frame from the live kinematics
+  const target = name => new THREE.Vector3(q[name][0] - SWING_F, q[name][1], 0);
+
+  const kids = [...arm.children];  // snapshot: re-parenting shifts indices
+  skin.armMeshes = {};
+  skin.armHolders = [];
+  for (const [link, spec] of Object.entries(ARM_CLUSTERS)) {
+    const m0 = pinSwing(spec.pins[0]), m1 = pinSwing(spec.pins[1]);
+    const t0 = target(spec.pins[0]), t1 = target(spec.pins[1]);
+    const ang = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
+    const dth = ang(t0, t1) - ang(m0, m1);
+    const k = Math.hypot(t1.x - t0.x, t1.y - t0.y) / Math.hypot(m1.x - m0.x, m1.y - m0.y);
+    // swing-frame alignment: model pin0 -> target pin0, model axis -> target axis
+    const M = new THREE.Matrix4().makeTranslation(t0.x, t0.y, 0)
+      .multiply(new THREE.Matrix4().makeRotationZ(dth))
+      .multiply(new THREE.Matrix4().makeScale(k, k, k))
+      .multiply(new THREE.Matrix4().makeTranslation(-m0.x, -m0.y, -m0.z));
+
+    const parent = mech[link === 'boom' ? 'boomG' : link === 'stick' ? 'stickG' : 'bucketG'];
+    parent.updateMatrixWorld(true);
+    const holder = new THREE.Group();
+    parent.add(holder);
+    const Mp = parent.matrixWorld.clone().invert()
+      .multiply(mech.swing.matrixWorld).multiply(M).multiply(swingInv);
+    Mp.decompose(holder.position, holder.quaternion, holder.scale);
+
+    skin.armMeshes[link] = [];
+    for (const i of spec.idx) {
+      const piece = kids[i];
+      if (!piece) continue;
+      piece.updateMatrixWorld(true);
+      const mw = piece.matrixWorld.clone();
+      holder.add(piece);                       // now under holder…
+      mw.decompose(piece.position, piece.quaternion, piece.scale); // …keeping old world as local
+      piece.traverse(o => {
+        if (o.isMesh) { o.castShadow = o.receiveShadow = true; skin.armMeshes[link].push(o); }
+      });
+    }
+    skin.armHolders.push(holder);
+  }
 }

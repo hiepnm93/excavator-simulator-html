@@ -58,18 +58,22 @@ const skinNote = document.getElementById('skin-note');
 let skin = null;
 const proceduralBodyMeshes = () => [
   ...mech.components.base, ...mech.components.chassis, ...mech.components.swingMotor,
+  ...mech.components.boom, ...mech.components.stick, ...mech.components.bucket,
 ];
 skinBox.addEventListener('change', async () => {
   if (skinBox.checked && !skin) {
     skinBox.disabled = true;
     skinNote.textContent = '(loading…)';
     try {
-      const { loadWarehouseSkin } = await import('./mechanical/WarehouseSkin.js');
+      const { loadWarehouseSkin, rigArm } = await import('./mechanical/WarehouseSkin.js');
       const { SWING_F } = await import('./ExcavatorParams.js');
+      const { solveKinematics } = await import('./mechanical/LinkageKinematics.js');
       skin = await loadWarehouseSkin('./assets/excavator-3dw.glb');
       skin.base.position.set(SWING_F, 0, 0);
       mech.root.add(skin.base);
       mech.swing.add(skin.house);
+      const rad = d => d * Math.PI / 180;
+      rigArm(skin, mech, solveKinematics(rad(state.boom), rad(state.stick), rad(state.bucket)));
       skinNote.textContent = '(3D Warehouse)';
     } catch (e) {
       skinNote.textContent = '(load failed)';
@@ -80,11 +84,17 @@ skinBox.addEventListener('change', async () => {
   }
   const on = skinBox.checked && skin;
   for (const m of proceduralBodyMeshes()) m.visible = !on;
-  if (skin) skin.base.visible = skin.house.visible = !!on;
-  // remap component highlighting for base/chassis to the active skin
+  if (skin) {
+    skin.base.visible = skin.house.visible = !!on;
+    for (const h of skin.armHolders || []) h.visible = !!on;
+  }
+  // remap component highlighting to the active skin
   componentMeshes.base = on ? skin.meshes.base : mech.components.base;
   componentMeshes.chassis = on ? skin.meshes.house : mech.components.chassis;
-  if (selected === 'base' || selected === 'chassis') select(null);
+  componentMeshes.boom = on ? skin.armMeshes.boom : mech.components.boom;
+  componentMeshes.stick = on ? skin.armMeshes.stick : mech.components.stick;
+  componentMeshes.bucket = on ? skin.armMeshes.bucket : mech.components.bucket;
+  if (['base', 'chassis', 'boom', 'stick', 'bucket'].includes(selected)) select(null);
 });
 
 // ------- component tree: highlight + parameter popup on click -------
