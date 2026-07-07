@@ -55,13 +55,17 @@ Built procedurally from published engineering *data* only — no assets copied f
   teeth adapters and side cutters, full track-shoe loop around sprocket/idler with rollers,
   rounded glazed cab, curved counterweight, handrails. No CAD from other projects is used
   for the simulated bodies.
-- **Optional body skin**: the "SketchUp body skin" checkbox swaps the procedural
-  undercarriage + house for the 3D Warehouse model
+- **Optional body skin**: the "SketchUp body skin" checkbox swaps the procedural machine
+  for the 3D Warehouse model
   ["Excavator" by Max M.](https://3dwarehouse.sketchup.com/model/c166a27e-f710-41ec-b43c-c9d4f016de52/Excavator)
   (`assets/excavator-3dw.glb`, used under the 3D Warehouse General Model License as part of
   this application). The GLB has no named part hierarchy, so subassemblies are classified by
-  bounding-box geometry; its static arm is hidden and the simulator's articulated,
-  pin-accurate arm stays in charge, with orientation/scale normalized automatically.
+  bounding-box geometry and orientation/scale are normalized automatically. The model's arm
+  (a Liebherr-style two-piece boom) is **rigged onto the simulator's joints**: its pivot pins
+  were measured from the GLB vertex data, each link cluster (lower+upper boom with the adjust
+  cylinder frozen, stick, bucket) is re-parented onto the corresponding pivot group with a
+  pin-to-pin alignment transform, while its static cylinders/linkage are hidden in favor of
+  the simulator's aimed cylinders. Brand lettering is hidden.
 - **Digging forces (ISO 6015) with pin loads**: an edge force is applied at the cutting
   edge (perpendicular to the bucket radius for BOF, to the arm radius for TOF) and resolved
   by sequential statics — bucket → linkage node → stick → boom, including part weights and
