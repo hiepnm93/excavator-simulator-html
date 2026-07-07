@@ -26,16 +26,22 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 document.body.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(3, 2, 0);
-const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+const sun = new THREE.DirectionalLight(0xfff4e0, 2.4);
 sun.position.set(18, 30, 12);
 sun.castShadow = true;
 sun.shadow.camera.left = sun.shadow.camera.bottom = -30;
 sun.shadow.camera.right = sun.shadow.camera.top = 30;
 sun.shadow.mapSize.set(2048, 2048);
-scene.add(sun, new THREE.AmbientLight(0xbfd4e5, 0.9));
+sun.shadow.bias = -0.0005;
+scene.add(sun,
+  new THREE.HemisphereLight(0xbfd4e5, 0x6b5a40, 0.85),
+  new THREE.AmbientLight(0xbfd4e5, 0.35));
 
 // ---------------- subsystems ----------------
 const soil = new SoilModel(scene);

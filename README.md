@@ -50,6 +50,10 @@ Built procedurally from published engineering *data* only — no assets copied f
   linkage, cutting edge) from the design table of
   [Excavator-Simscape](https://github.com/simscape/Excavator-Simscape) (MathWorks).
   The bucket linkage node is solved each frame by circle–circle intersection.
+- **Geometry**: all bodies are procedural, generated around the pin table — welded box
+  sections with side plates and pin bosses for boom/stick, bucket shell with mounting ears,
+  teeth adapters and side cutters, full track-shoe loop around sprocket/idler with rollers,
+  rounded glazed cab, curved counterweight, handrails. No CAD from other projects is used.
 - **Digging forces (ISO 6015) with pin loads**: an edge force is applied at the cutting
   edge (perpendicular to the bucket radius for BOF, to the arm radius for TOF) and resolved
   by sequential statics — bucket → linkage node → stick → boom, including part weights and

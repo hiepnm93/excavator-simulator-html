@@ -40,8 +40,8 @@ function rodAssembly(parent, r1, r2, twin) {
     g.add(c);
     return c;
   };
-  const parts = { body: mk(r1, MAT.dark), rod: mk(r2, MAT.steel), g };
-  if (twin) { parts.body2 = mk(r1, MAT.dark); parts.rod2 = mk(r2, MAT.steel); }
+  const parts = { body: mk(r1, MAT.dark), rod: mk(r2, MAT.chrome), g };
+  if (twin) { parts.body2 = mk(r1, MAT.dark); parts.rod2 = mk(r2, MAT.chrome); }
   parts.meshes = [parts.body, parts.rod, parts.body2, parts.rod2].filter(Boolean);
   return parts;
 }
