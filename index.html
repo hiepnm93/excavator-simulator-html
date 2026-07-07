@@ -38,6 +38,17 @@
   #tree .comp:hover { background: #2b3340; }
   #tree .comp.sel { background: #2a6bd4; color: #fff; }
   #components p { color: #9aa0a6; font-size: 11px; margin: 8px 0 0; line-height: 1.4; }
+  /* parameter popup */
+  #popup { right: 268px; width: 265px; display: none; }
+  #popup h1 { padding-right: 20px; }
+  #popup-close {
+    position: absolute; top: 8px; right: 10px; width: auto; margin: 0;
+    background: none; color: #9aa0a6; font-size: 16px; padding: 2px 6px;
+  }
+  #popup table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  #popup td { padding: 3px 0; border-bottom: 1px solid #333a42; vertical-align: top; }
+  #popup td:first-child { color: #9aa0a6; padding-right: 8px; }
+  #popup td:last-child { text-align: right; color: #f6b100; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -54,8 +65,9 @@
   <button id="digcycle">▶ Auto Dig Cycle</button>
   <button id="reset">Reset Terrain</button>
   <div id="stats">
-    <div>Breakout force (BOF) <b id="bof">– kN</b></div>
-    <div>Stick force (TOF) <b id="tof">– kN</b></div>
+    <div>BOF <b id="bof">– kN</b></div>
+    <div>TOF <b id="tof">– kN</b></div>
+    <div>Limited by <b id="limiter">–</b></div>
     <div>Pump flow used <b id="flow">0%</b></div>
     <div>Soil load (stall) <b id="load">0%</b></div>
     <div>Stick regen valve <b><span id="regen">ACTIVE</span></b></div>
@@ -70,32 +82,41 @@
   <ul id="tree">
     <li><span class="sys">Mechanical System</span>
       <ul>
-        <li><span class="comp" data-c="lower">Lower Structure (tracks)</span></li>
-        <li><span class="comp" data-c="upper">Upper Structure (house)</span></li>
-        <li><span class="sys">Linkage Assembly</span>
-          <ul>
-            <li><span class="comp" data-c="boom">Boom</span></li>
-            <li><span class="comp" data-c="stick">Stick (arm)</span></li>
-            <li><span class="comp" data-c="bucket">Bucket</span></li>
-            <li><span class="comp" data-c="linkage">H-link + bucket link</span></li>
-          </ul>
-        </li>
+        <li><span class="comp" data-c="base">Base (tracks)</span></li>
+        <li><span class="comp" data-c="jointSwing">BaseToChassis ⟲</span></li>
+        <li><span class="comp" data-c="chassis">Chassis (house)</span></li>
+        <li><span class="comp" data-c="jointA1">ChassisToBoom ⟲ A1</span></li>
+        <li><span class="comp" data-c="boom">Boom</span></li>
+        <li><span class="comp" data-c="cylBoomL">Boom Cyl L</span></li>
+        <li><span class="comp" data-c="cylBoomR">Boom Cyl R</span></li>
+        <li><span class="comp" data-c="jointB3">BoomToStick ⟲ B3</span></li>
+        <li><span class="comp" data-c="stick">Stick</span></li>
+        <li><span class="comp" data-c="cylStick">Stick Cyl</span></li>
+        <li><span class="comp" data-c="jointC4">StickToBucket ⟲ C4</span></li>
+        <li><span class="comp" data-c="cylBucket">Bucket Cyl</span></li>
+        <li><span class="comp" data-c="linkage">Bucket Linkage</span></li>
+        <li><span class="comp" data-c="bucket">Bucket</span></li>
       </ul>
     </li>
-    <li><span class="sys">Hydraulic System</span>
+    <li><span class="sys">Hydraulics</span>
       <ul>
-        <li><span class="comp" data-c="cylBoom">Boom cylinders ×2</span></li>
-        <li><span class="comp" data-c="cylStick">Stick cylinder (+regen)</span></li>
-        <li><span class="comp" data-c="cylBucket">Bucket cylinder</span></li>
-        <li><span class="comp" data-c="swingMotor">Swing motor</span></li>
+        <li><span class="comp" data-c="pump">Pump ×2</span></li>
+        <li><span class="comp" data-c="valves">Valve Block</span></li>
+        <li><span class="comp" data-c="swingMotor">Swing Motor</span></li>
       </ul>
     </li>
     <li><span class="comp" data-c="soil">Soil Model</span></li>
   </ul>
-  <p>Click a component to highlight it. Hierarchy mirrors MathWorks'
-     <em>Excavator Design with Simscape</em> model: Excavator Model →
-     Mechanical System → smaller components, plus the hydraulic actuation
-     network.</p>
+  <p>Click a component to highlight it and open its parameter popup
+     (cylinder areas, part masses, pressures, pin loads @ BOF).
+     Components follow the Mechanical System diagram of MathWorks'
+     <em>Excavator Design with Simscape</em>.</p>
+</div>
+
+<div id="popup" class="panel">
+  <button id="popup-close">✕</button>
+  <h1 id="popup-title"></h1>
+  <table><tbody id="popup-rows"></tbody></table>
 </div>
 
 <div id="hint">Drag to orbit · scroll to zoom · dig below grade with the bucket curling to fill it, raise + open to dump</div>

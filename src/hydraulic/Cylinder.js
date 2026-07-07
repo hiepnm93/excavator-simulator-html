@@ -6,17 +6,15 @@
 import { HYD } from '../ExcavatorParams.js';
 import { cylLen, dLdTheta } from '../mechanical/LinkageKinematics.js';
 
-const A = d => Math.PI * d * d / 4;
-
 export class Cylinder {
   constructor(name) {
     const s = HYD[name];
     this.name = name;
     this.lenFn = cylLen[name];
     this.maxFlow = s.maxFlow;                       // m³/s at full valve command
-    this.areaHead = s.count * A(s.bore);            // m²
-    this.areaRod = s.count * (A(s.bore) - A(s.rod));
-    this.forceMax = HYD.pRelief * this.areaHead;    // N, relief-limited push
+    this.areaHead = s.areaHead;                     // m² (pair total for boom)
+    this.areaRod = s.areaRodEnd;
+    this.forceMax = HYD.pPump * this.areaHead;      // N, pump-limited push
     this.regenBoost = s.regenBoost || 1;
     this.regenFlowSave = s.regenFlowSave || 0;
   }

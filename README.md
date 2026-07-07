@@ -14,12 +14,15 @@ an on-screen component tree lets you highlight each one:
 ```
 Excavator Model (src/main.js)
 ├─ ExcavatorParams.js            ≈ Scripts_Data/Excavator_Init_Params.m (pins, hydraulics, soil)
-├─ Mechanical System             ≈ the Simscape "Mechanical System" subsystem
-│  ├─ LowerStructure.js            tracks / base
-│  ├─ UpperStructure.js            swing platform, cab, counterweight, swing-motor housing
+├─ Mechanical System             ≈ the Simscape "Mechanical System" subsystem, same block split:
+│  │                               Base · BaseToChassis ⟲ · Chassis · ChassisToBoom ⟲ · Boom ·
+│  │                               Boom Cyl L/R · BoomToStick ⟲ · Stick · Stick Cyl ·
+│  │                               StickToBucket ⟲ · Bucket Cyl · Bucket Linkage · Bucket
+│  ├─ LowerStructure.js            Base (tracks)
+│  ├─ UpperStructure.js            Chassis: swing platform, cab, counterweight, swing motor
 │  ├─ LinkageKinematics.js       ≈ Linkage_Assembly_Lib (FK, 4-bar node, joint limits)
 │  ├─ Boom.js · Stick.js · BucketAssembly.js
-│  ├─ MechanicalSystem.js          assembly + cylinder/link visuals
+│  ├─ MechanicalSystem.js          assembly, joint markers, cylinder/link visuals
 │  └─ parts.js                   ≈ Excavator_Parts_Lib (shared part builders)
 ├─ Hydraulic System
 │  ├─ Cylinder.js                  valve command → flow → piston speed → joint rate
@@ -29,9 +32,16 @@ Excavator Model (src/main.js)
 │  └─ OperatorCommands.js        ≈ ValveCmdLib (lever targets + keyframed dig cycle)
 ├─ Soil
 │  └─ SoilModel.js                 heightfield + angle-of-repose relaxation
-└─ Analysis
-   └─ ForceAnalysis.js             BOF + TOF per ISO 6015
+├─ Analysis
+│  └─ ForceAnalysis.js             BOF/TOF tests per ISO 6015 with full pin-load statics
+└─ UI
+   └─ ComponentInfo.js             parameter popups (areas, masses, pressures, pin loads)
 ```
+
+Clicking a component in the on-screen tree highlights it (joints get a pin marker) and
+opens a **parameter popup** like the Excavator Design app's BOF/TOF tab: cylinder head/rod-end
+areas (mm²), part masses (kg), max pressures (bar), pin locations, joint limits, and the live
+**pin loads (kN)** and cylinder pressures of the running BOF test.
 
 ## Engineering model
 Built procedurally from published engineering *data* only — no assets copied from other projects:
@@ -40,14 +50,20 @@ Built procedurally from published engineering *data* only — no assets copied f
   linkage, cutting edge) from the design table of
   [Excavator-Simscape](https://github.com/simscape/Excavator-Simscape) (MathWorks).
   The bucket linkage node is solved each frame by circle–circle intersection.
-- **Digging forces (ISO 6015)**: BOF from the bucket cylinder (relief pressure × bore area,
-  force balance at the linkage node, torque about the bucket pivot over the lever arm to the
-  cutting edge) **and TOF** from the stick cylinder (torque about the stick pivot).
-  Assumes 34.3 MPa relief; bucket ⌀130 mm, stick ⌀135 mm, boom 2×⌀120 mm bores.
+- **Digging forces (ISO 6015) with pin loads**: an edge force is applied at the cutting
+  edge (perpendicular to the bucket radius for BOF, to the arm radius for TOF) and resolved
+  by sequential statics — bucket → linkage node → stick → boom, including part weights and
+  the soil load — giving every cylinder force and pin load. The test force is the largest
+  value keeping the *active* cylinder under the 350 bar pump relief and every *holding*
+  cylinder under its 400 bar port relief, so the binding function is reported (the boom
+  holding circuit often caps BOF before the bucket cylinder reliefs — exactly as in the
+  app's results table). Cylinder areas (boom 38013/20341, stick 49087/26389, bucket
+  38013/17907 mm² head/rod-end) and part masses (7226.5 / 3327.9 / 5119.5 kg) follow the
+  app's defaults.
 - **Hydraulic actuation**: joints chase the operator targets at flow-limited speeds
   (piston speed = valve flow / piston area, mapped through the linkage dL/dθ; head vs rod
-  side areas give different extend/retract speeds). A finite pump (2 × 210 L/min) is shared
-  between simultaneous functions, the swing motor is acceleration-limited, digging engagement
+  side areas give different extend/retract speeds). A finite pump is shared between
+  simultaneous functions, the swing motor is acceleration-limited, digging engagement
   stalls the stick/bucket functions against the relief valve, and a stick-in **regeneration
   valve** speeds the stick while saving pump flow — all following the Simscape model's
   hydraulic actuation network (simplified).

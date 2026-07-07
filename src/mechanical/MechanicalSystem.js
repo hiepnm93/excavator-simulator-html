@@ -94,15 +94,33 @@ export class MechanicalSystem {
     this.hLink = rodAssembly(this.swing, 0.05, 0.045, true);     // H-link pair
     this.bLink = rodAssembly(this.swing, 0.055, 0.05, false);    // bucket link
 
+    // joint markers (revolute joints of the Simscape diagram), shown on select
+    const markerMat = new THREE.MeshBasicMaterial({ color: 0xff3355, depthTest: false });
+    const marker = (parent, x, y, z) => {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 10), markerMat);
+      m.position.set(x, y, z);
+      m.visible = false;
+      m.renderOrder = 999;
+      parent.add(m);
+      return m;
+    };
+    this.markers = {
+      jointSwing: marker(this.swing, 0, 0.35, 0),   // BaseToChassis (swing axis)
+      jointA1: marker(this.boomG, 0, 0, 0),         // ChassisToBoom
+      jointB3: marker(this.stickG, 0, 0, 0),        // BoomToStick
+      jointC4: marker(this.bucketG, 0, 0, 0),       // StickToBucket
+    };
+
     // component registry for the UI tree (name -> meshes to highlight)
     this.components = {
-      lower: lower.meshes,
-      upper: upper.meshes,
+      base: lower.meshes,
+      chassis: upper.meshes,
       boom: boom.meshes,
       stick: stick.meshes,
       bucket: bucket.meshes,
       linkage: [...this.hLink.meshes, ...this.bLink.meshes],
-      cylBoom: this.boomCyl.meshes,
+      cylBoomL: [this.boomCyl.body, this.boomCyl.rod],
+      cylBoomR: [this.boomCyl.body2, this.boomCyl.rod2],
       cylStick: this.stickCyl.meshes,
       cylBucket: this.bktCyl.meshes,
       swingMotor: [upper.swingMotorMesh],
