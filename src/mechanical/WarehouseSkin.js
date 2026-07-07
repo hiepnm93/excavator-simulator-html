@@ -173,15 +173,30 @@ export function rigArm(skin, mech, q) {
   const kids = [...arm.children];  // snapshot: re-parenting shifts indices
   skin.armMeshes = {};
   skin.armHolders = [];
+
+  // the static arm is yawed out of the machine's sagittal plane, so the
+  // alignment needs a full 3D rotation: link axis -> target axis AND the
+  // arm's lateral axis -> the machine's lateral axis (swing z)
+  const Msw = swingInv.clone().multiply(arm.matrixWorld);
+  const armLat = new THREE.Vector3(0, 1, 0).applyMatrix4(Msw)
+    .sub(new THREE.Vector3(0, 0, 0).applyMatrix4(Msw)).normalize();
+  const frameOf = (ex, ezApprox) => {
+    const ez = ezApprox.clone().addScaledVector(ex, -ezApprox.dot(ex)).normalize();
+    const ey = new THREE.Vector3().crossVectors(ez, ex);
+    return new THREE.Matrix4().makeBasis(ex, ey, ez);
+  };
+
   for (const [link, spec] of Object.entries(ARM_CLUSTERS)) {
     const m0 = pinSwing(spec.pins[0]), m1 = pinSwing(spec.pins[1]);
     const t0 = target(spec.pins[0]), t1 = target(spec.pins[1]);
-    const ang = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
-    const dth = ang(t0, t1) - ang(m0, m1);
-    const k = Math.hypot(t1.x - t0.x, t1.y - t0.y) / Math.hypot(m1.x - m0.x, m1.y - m0.y);
-    // swing-frame alignment: model pin0 -> target pin0, model axis -> target axis
+    const exm = m1.clone().sub(m0), ext = t1.clone().sub(t0);
+    const k = ext.length() / exm.length();
+    const R = frameOf(ext.normalize(), new THREE.Vector3(0, 0, 1))
+      .multiply(frameOf(exm.normalize(), armLat).invert());
+    // swing-frame alignment: model pin0 -> target pin0, model axis -> target
+    // axis, model lateral -> machine lateral (both pins map exactly)
     const M = new THREE.Matrix4().makeTranslation(t0.x, t0.y, 0)
-      .multiply(new THREE.Matrix4().makeRotationZ(dth))
+      .multiply(R)
       .multiply(new THREE.Matrix4().makeScale(k, k, k))
       .multiply(new THREE.Matrix4().makeTranslation(-m0.x, -m0.y, -m0.z));
 
@@ -210,6 +225,8 @@ export function rigArm(skin, mech, q) {
   }
 
   articulateActuators(skin, mech, kids, arm.matrixWorld.clone());
+  if (typeof window !== 'undefined')   // diagnostics hook for tests
+    window.__skinDebug = { skin, mech, ARM_PINS, armW: arm.matrixWorld.clone(), params: { PIN, SWING_F } };
 }
 
 /* anchor each cylinder/link of the model between its lugs on the rigged

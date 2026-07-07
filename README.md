@@ -62,10 +62,14 @@ Built procedurally from published engineering *data* only — no assets copied f
   this application). The GLB has no named part hierarchy, so subassemblies are classified by
   bounding-box geometry and orientation/scale are normalized automatically. The model's arm
   (a Liebherr-style two-piece boom) is **rigged onto the simulator's joints**: its pivot pins
-  were measured from the GLB vertex data, each link cluster (lower+upper boom with the adjust
-  cylinder frozen, stick, bucket) is re-parented onto the corresponding pivot group with a
-  pin-to-pin alignment transform, while its static cylinders/linkage are hidden in favor of
-  the simulator's aimed cylinders. Brand lettering is hidden.
+  were measured from the GLB vertex data, and each link cluster (lower+upper boom, stick,
+  bucket) is re-parented onto the corresponding pivot group with a full 3D pin-to-pin
+  alignment — link axis onto the target axis **and the arm's lateral axis onto the machine's
+  lateral axis**, so every link lies in the sagittal working plane exactly like the pin
+  skeleton of the Simscape BOF/TOF figure (both pins of every link land on the simulator's
+  A1/B3/C4/D2 to the millimetre). The model's own cylinders and 4-bar links are articulated
+  between their real lugs (body anchored at the base lug, rod at the rod lug, re-aimed every
+  frame; the links chase the live linkage node E1). Brand lettering is hidden.
 - **Digging forces (ISO 6015) with pin loads**: an edge force is applied at the cutting
   edge (perpendicular to the bucket radius for BOF, to the arm radius for TOF) and resolved
   by sequential statics — bucket → linkage node → stick → boom, including part weights and
