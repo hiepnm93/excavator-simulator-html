@@ -55,25 +55,27 @@ document.getElementById('reset').onclick = () => soil.reset();
 import('./mechanical/WarehouseSkin.js'); // warm the module cache
 const skinBox = document.getElementById('skin');
 const skinNote = document.getElementById('skin-note');
-let skin = null;
+let skin = null, skinMod = null;
 const proceduralBodyMeshes = () => [
   ...mech.components.base, ...mech.components.chassis, ...mech.components.swingMotor,
   ...mech.components.boom, ...mech.components.stick, ...mech.components.bucket,
+  ...mech.components.cylBoomL, ...mech.components.cylBoomR,
+  ...mech.components.cylStick, ...mech.components.cylBucket, ...mech.components.linkage,
 ];
 skinBox.addEventListener('change', async () => {
   if (skinBox.checked && !skin) {
     skinBox.disabled = true;
     skinNote.textContent = '(loading…)';
     try {
-      const { loadWarehouseSkin, rigArm } = await import('./mechanical/WarehouseSkin.js');
+      skinMod = await import('./mechanical/WarehouseSkin.js');
       const { SWING_F } = await import('./ExcavatorParams.js');
       const { solveKinematics } = await import('./mechanical/LinkageKinematics.js');
-      skin = await loadWarehouseSkin('./assets/excavator-3dw.glb');
+      skin = await skinMod.loadWarehouseSkin('./assets/excavator-3dw.glb');
       skin.base.position.set(SWING_F, 0, 0);
       mech.root.add(skin.base);
       mech.swing.add(skin.house);
       const rad = d => d * Math.PI / 180;
-      rigArm(skin, mech, solveKinematics(rad(state.boom), rad(state.stick), rad(state.bucket)));
+      skinMod.rigArm(skin, mech, solveKinematics(rad(state.boom), rad(state.stick), rad(state.bucket)));
       skinNote.textContent = '(3D Warehouse)';
     } catch (e) {
       skinNote.textContent = '(load failed)';
@@ -94,7 +96,14 @@ skinBox.addEventListener('change', async () => {
   componentMeshes.boom = on ? skin.armMeshes.boom : mech.components.boom;
   componentMeshes.stick = on ? skin.armMeshes.stick : mech.components.stick;
   componentMeshes.bucket = on ? skin.armMeshes.bucket : mech.components.bucket;
-  if (['base', 'chassis', 'boom', 'stick', 'bucket'].includes(selected)) select(null);
+  componentMeshes.cylBoomL = on ? skin.actMeshes.boomCyl : mech.components.cylBoomL;
+  componentMeshes.cylBoomR = on ? skin.actMeshes.adjustCyl : mech.components.cylBoomR;
+  componentMeshes.cylStick = on ? skin.actMeshes.stickCyl : mech.components.cylStick;
+  componentMeshes.cylBucket = on ? skin.actMeshes.bucketCyl : mech.components.cylBucket;
+  componentMeshes.linkage = on
+    ? [...skin.actMeshes.hLink, ...skin.actMeshes.bucketLink] : mech.components.linkage;
+  if (!['jointSwing', 'jointA1', 'jointB3', 'jointC4', 'soil', 'pump', 'valves', 'swingMotor', null]
+    .includes(selected)) select(null);
 });
 
 // ------- component tree: highlight + parameter popup on click -------
@@ -175,6 +184,7 @@ function animate() {
   const targets = operator.update(dt);              // operator commands
   hyd.update(state, targets, dt, loadFactor);       // hydraulic actuation
   const q = mech.applyPose(state);                  // mechanical system pose
+  if (skin && skinBox.checked) skinMod.updateActuators(skin, mech, q);
 
   for (const k in state) $('v-' + k).textContent = Math.round(state[k]) + '°';
 
